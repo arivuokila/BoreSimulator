@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Part #MB-402 Bearing Bore Quality Control & SPC Simulator</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              500: '#06b6d4',
+              600: '#0891b2',
+              700: '#0e7490',
+            },
+            industrial: {
+              800: '#1e293b',
+              900: '#0f172a',
+              950: '#020617',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js and Plugins -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Target line pulse animation */
+    @keyframes pulse-cyan {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 0.3; }
+    }
+    .animate-pulse-cyan {
+      animation: pulse-cyan 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Print styles for quality report */
+    @media print {
+      body {
+        background: white !important;
+        color: black !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-only {
+        display: block !important;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+
+<body class="h-full flex flex-col font-sans antialiased text-slate-200 bg-slate-950 selection:bg-cyan-500 selection:text-slate-950">
+
+  <!-- TOP HEADER / NAV BAR -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40 px-4 py-3 no-print">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-cyan-400">
+            <i data-lucide="cpu" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-lg font-bold text-white tracking-tight">MB-402 Bore Quality Simulator</h1>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">VET Advanced Mfg Lab</span>
+            </div>
+            <p class="text-xs text-slate-400">Aluminum Mounting Bracket | Feature: Critical Bearing Bore 30.000mm (+0.010/-0.000)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Preset & Control Toolbar -->
+      <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+        <button id="btnLoadProblem" onclick="loadProblemPreset()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition flex items-center gap-1.5 shadow-sm">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+          <span>Preset: Problem Batch (Drift Case)</span>
+        </button>
+
+        <button id="btnLoadCorrected" onclick="loadCorrectedPreset()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition flex items-center gap-1.5 shadow-sm">
+          <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+          <span>Preset: Optimized Process ($C_{pk} > 1.33$)</span>
+        </button>
+
+        <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+
+        <button onclick="toggleTab('analysis')" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1">
+          <i data-lucide="help-circle" class="w-3.5 h-3.5 text-cyan-400"></i>
+          <span>RCA & 5-Whys</span>
+        </button>
+
+        <button onclick="openPrintModal()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center gap-1">
+          <i data-lucide="file-text" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>QC Report</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WRAPPER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+
+    <!-- KPI STATS SUMMARY DASHBOARD -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 no-print">
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm relative overflow-hidden">
+        <span class="text-xs font-medium text-slate-400 block mb-1">Batch Progress</span>
+        <div class="flex items-baseline justify-between">
+          <span id="kpiPartProgress" class="text-xl font-mono font-bold text-white">0 / 50</span>
+          <span id="kpiProgressPct" class="text-xs font-mono text-cyan-400">0%</span>
+        </div>
+        <div class="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+          <div id="progressBar" class="bg-cyan-500 h-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <span class="text-xs font-medium text-slate-400 block mb-1">Bore Mean ($\bar{X}$)</span>
+        <div class="flex items-baseline justify-between">
+          <span id="kpiMean" class="text-xl font-mono font-bold text-white">30.0000 mm</span>
+          <span id="kpiMeanDev" class="text-xs font-mono text-slate-400">+0.0 µm</span>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-1">Target: 30.0050 mm</p>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <span class="text-xs font-medium text-slate-400 block mb-1">Scrap / Defect Rate</span>
+        <div class="flex items-baseline justify-between">
+          <span id="kpiScrapRate" class="text-xl font-mono font-bold text-emerald-400">0.0%</span>
+          <span id="kpiScrapCount" class="text-xs font-mono text-slate-400">0 / 50</span>
+        </div>
+        <p id="kpiScrapNote" class="text-[10px] text-emerald-400 mt-1">Within Tolerances</p>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+        <span class="text-xs font-medium text-slate-400 block mb-1">Process Capability ($C_p$)</span>
+        <div class="flex items-baseline justify-between">
+          <span id="kpiCp" class="text-xl font-mono font-bold text-slate-300">0.00</span>
+          <span id="kpiSigma" class="text-xs font-mono text-slate-400">$\sigma$: --</span>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-1">Spread vs Tolerance</p>
+      </div>
+
+      <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm col-span-2 md:col-span-1">
+        <span class="text-xs font-medium text-slate-400 block mb-1">Capability Index ($C_{pk}$)</span>
+        <div class="flex items-baseline justify-between">
+          <span id="kpiCpk" class="text-xl font-mono font-bold text-emerald-400">0.00</span>
+          <span id="kpiCpkBadge" class="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-emerald-950 text-emerald-400 border border-emerald-800">PASS</span>
+        </div>
+        <p id="kpiCpkDesc" class="text-[10px] text-slate-400 mt-1">Centering & Capability</p>
+      </div>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTENT AREA -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 no-print">
+
+      <!-- LEFT COLUMN: CMM Visualizer + Simulation Sliders (5 cols) -->
+      <div class="lg:col-span-5 space-y-6 flex flex-col">
+        
+        <!-- CMM PROBE ANIMATED VISUALIZER CARD -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex-1 flex flex-col">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+            <div class="flex items-center gap-2">
+              <i data-lucide="crosshair" class="w-4 h-4 text-cyan-400"></i>
+              <h2 class="text-sm font-semibold text-white uppercase tracking-wider">CMM Touch Probe Visualizer</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="currentPartTag" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">Part #--</span>
+              <span id="statusBadge" class="text-xs font-bold font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">IDLE</span>
+            </div>
+          </div>
+
+          <!-- SVG Visualizer Viewport -->
+          <div class="relative bg-slate-950 rounded-xl border border-slate-800 p-2 flex items-center justify-center min-h-[260px]">
+            <svg id="cmmSvg" viewBox="0 0 320 260" class="w-full h-auto max-h-[280px]">
+              <defs>
+                <!-- Radial Gradients for Metal Bore Part -->
+                <radialGradient id="metalGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="60%" stop-color="#1e293b"/>
+                  <stop offset="90%" stop-color="#0f172a"/>
+                  <stop offset="100%" stop-color="#334155"/>
+                </radialGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+
+              <!-- Aluminum Part Drawing Outer Frame -->
+              <rect x="20" y="20" width="280" height="220" rx="16" fill="url(#metalGrad)" stroke="#475569" stroke-width="2"/>
+              <!-- Part Chamfers / Mounting Screws -->
+              <circle cx="45" cy="45" r="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+              <circle cx="275" cy="45" r="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+              <circle cx="45" cy="215" r="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+              <circle cx="275" cy="215" r="8" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+
+              <!-- Part Identification Label -->
+              <text x="160" y="42" font-family="JetBrains Mono" font-size="10" fill="#94a3b8" text-anchor="middle" font-weight="600">PART #MB-402 (ALUMINUM)</text>
+
+              <!-- Nominal Bore Guide Circle (D = 30.000mm) -->
+              <circle cx="160" cy="135" r="70" fill="#020617" stroke="#334155" stroke-width="2" stroke-dasharray="3,3"/>
+              
+              <!-- Upper Spec Limit Zone Ring (30.010mm) -->
+              <circle id="svgUslRing" cx="160" cy="135" r="74" fill="none" stroke="#ef4444" stroke-width="1" stroke-opacity="0.4"/>
+              
+              <!-- Lower Spec Limit Zone Ring (30.000mm) -->
+              <circle id="svgLslRing" cx="160" cy="135" r="70" fill="none" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.4"/>
+
+              <!-- Actual Measured Bore Oval Geometry -->
+              <ellipse id="svgActualBore" cx="160" cy="135" rx="70" ry="70" fill="#06b6d4" fill-opacity="0.08" stroke="#06b6d4" stroke-width="2"/>
+
+              <!-- Center Axis Lines -->
+              <line x1="160" y1="55" x2="160" y2="215" stroke="#334155" stroke-width="1" stroke-dasharray="2,2"/>
+              <line x1="80" y1="135" x2="240" y2="135" stroke="#334155" stroke-width="1" stroke-dasharray="2,2"/>
+
+              <!-- Animated CMM Touch Probe Assembly -->
+              <g id="svgProbeGroup" transform="translate(160, 135)">
+                <!-- Probe Shaft / Stylus -->
+                <line id="svgProbeShaft" x1="0" y1="0" x2="0" y2="0" stroke="#cbd5e1" stroke-width="3"/>
+                <!-- Ruby Stylus Ball Tip -->
+                <circle id="svgProbeTip" cx="0" cy="0" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" filter="url(#glow)"/>
+                <!-- Touch Ripple Wave -->
+                <circle id="svgTouchRipple" cx="0" cy="0" r="8" fill="none" stroke="#06b6d4" stroke-width="2" opacity="0"/>
+              </g>
+
+              <!-- CMM Readout Overlay Text inside SVG -->
+              <text x="160" y="130" font-family="JetBrains Mono" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle" id="svgValueText">30.0000 mm</text>
+              <text x="160" y="148" font-family="JetBrains Mono" font-size="10" fill="#06b6d4" text-anchor="middle" id="svgDevText">Dev: +0.0 µm</text>
+            </svg>
+
+            <!-- Touch Point Indicators -->
+            <div class="absolute bottom-2 left-2 right-2 flex justify-between text-[10px] font-mono text-slate-400 bg-slate-900/80 backdrop-blur px-2.5 py-1 rounded border border-slate-800">
+              <span>P1 (Top): <strong id="tp1" class="text-slate-200">--</strong></span>
+              <span>P2 (Right): <strong id="tp2" class="text-slate-200">--</strong></span>
+              <span>P3 (Bottom): <strong id="tp3" class="text-slate-200">--</strong></span>
+              <span>P4 (Left): <strong id="tp4" class="text-slate-200">--</strong></span>
+            </div>
+          </div>
+
+          <!-- Tolerances Scale Dial Bar -->
+          <div class="mt-4 space-y-1.5">
+            <div class="flex justify-between text-xs font-mono text-slate-400">
+              <span class="text-blue-400">LSL: 30.000</span>
+              <span class="text-cyan-400 font-semibold">Nominal: 30.005</span>
+              <span class="text-rose-400">USL: 30.010</span>
+            </div>
+            <div class="relative h-4 bg-slate-950 rounded-full border border-slate-800 overflow-hidden flex items-center">
+              <!-- Colored tolerance bands background -->
+              <div class="absolute inset-y-0 left-0 w-[30%] bg-blue-950/50 border-r border-blue-800/40"></div>
+              <div class="absolute inset-y-0 left-[30%] w-[40%] bg-emerald-950/60"></div>
+              <div class="absolute inset-y-0 left-[70%] w-[30%] bg-rose-950/50 border-l border-rose-800/40"></div>
+              
+              <!-- Spec lines -->
+              <div class="absolute top-0 bottom-0 left-[30%] w-0.5 bg-blue-500 z-10" title="LSL"></div>
+              <div class="absolute top-0 bottom-0 left-[50%] w-0.5 bg-cyan-400 z-10" title="Target Nominal"></div>
+              <div class="absolute top-0 bottom-0 left-[70%] w-0.5 bg-rose-500 z-10" title="USL"></div>
+
+              <!-- Animated Indicator Pointer Pin -->
+              <div id="tolerancePointer" class="absolute top-0 bottom-0 w-2.5 bg-white border border-slate-900 rounded-sm shadow-md transition-all duration-300 z-20" style="left: 50%; transform: translateX(-50%);"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>Undersize (&lt; 30.000)</span>
+              <span>Tolerance Band (10 µm)</span>
+              <span>Oversize (&gt; 30.010)</span>
+            </div>
+          </div>
+
+          <!-- BATCH PLAYER CONTROLS -->
+          <div class="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+              <button id="btnPlay" onclick="togglePlay()" class="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5">
+                <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                <span id="btnPlayText">Run Batch</span>
+              </button>
+              <button onclick="stepForward()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition" title="Step 1 Part Forward">
+                <i data-lucide="skip-forward" class="w-4 h-4"></i>
+              </button>
+              <button onclick="resetBatch()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition" title="Reset Batch">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <!-- Animation Speed Select -->
+            <div class="flex items-center gap-1">
+              <span class="text-[11px] text-slate-400">Speed:</span>
+              <button onclick="setSpeed(300)" id="spd1" class="px-2 py-0.5 text-xs font-mono rounded bg-cyan-950 text-cyan-400 border border-cyan-800">1x</button>
+              <button onclick="setSpeed(100)" id="spd2" class="px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-slate-400 hover:text-white">3x</button>
+              <button onclick="setSpeed(0)" id="spd3" class="px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-slate-400 hover:text-white">Instant</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PROCESS PARAMETER CONTROLS & PHYSICAL VARIABLES -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
+              <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Machining Process Parameters</h3>
+            </div>
+            <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">Custom Simulation Mode</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Parameter 1: Coolant Flow & Thermal Drift -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center text-xs">
+                <label for="sliderCoolant" class="text-slate-300 font-medium">Coolant Temp / Flow</label>
+                <span id="valCoolant" class="font-mono text-rose-400 text-[11px]">Low Flow (+38°C)</span>
+              </div>
+              <input type="range" id="sliderCoolant" min="0" max="100" value="15" oninput="onParamChange()" class="w-full accent-cyan-500 bg-slate-800 h-1.5 rounded cursor-pointer">
+              <p class="text-[10px] text-slate-500">Inadequate coolant causes boring bar thermal expansion ($\Delta L = \alpha L \Delta T$), cutting deeper bores.</p>
+            </div>
+
+            <!-- Parameter 2: Boring Bar Material & Expansion CTE -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center text-xs">
+                <label for="selectBarMaterial" class="text-slate-300 font-medium">Boring Bar Material</label>
+                <span class="font-mono text-cyan-400 text-[11px]" id="barMaterialLabel">Steel Bar</span>
+              </div>
+              <select id="selectBarMaterial" onchange="onParamChange()" class="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-1.5 focus:border-cyan-500 focus:outline-none">
+                <option value="steel" selected>Steel Shank Bar (High CTE = 12 µm/m°C)</option>
+                <option value="carbide">Carbide Shank Bar (Low CTE = 5 µm/m°C)</option>
+                <option value="damped">Heavy Metal Anti-Vibe Tuned Bar</option>
+              </select>
+              <p class="text-[10px] text-slate-500">Stiffer, lower-CTE bars mitigate thermal growth drift.</p>
+            </div>
+
+            <!-- Parameter 3: Built-Up Edge (BUE) Accumulation Risk -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center text-xs">
+                <label for="sliderBUE" class="text-slate-300 font-medium">BUE / Tool Adhesion Risk</label>
+                <span id="valBUE" class="font-mono text-amber-400 text-[11px]">High (Uncoated)</span>
+              </div>
+              <input type="range" id="sliderBUE" min="0" max="100" value="70" oninput="onParamChange()" class="w-full accent-amber-500 bg-slate-800 h-1.5 rounded cursor-pointer">
+              <p class="text-[10px] text-slate-500">Aluminum welds to cutting edge, effectively increasing tool tip radius (oversize cut).</p>
+            </div>
+
+            <!-- Parameter 4: Insert Clamp Torque / Tool Deflection -->
+            <div class="space-y-1.5">
+              <div class="flex justify-between items-center text-xs">
+                <label for="sliderTorque" class="text-slate-300 font-medium">Insert Screw Torque</label>
+                <span id="valTorque" class="font-mono text-slate-300 text-[11px]">1.5 Nm (Loose)</span>
+              </div>
+              <input type="range" id="sliderTorque" min="10" max="50" value="15" oninput="onParamChange()" class="w-full accent-cyan-500 bg-slate-800 h-1.5 rounded cursor-pointer">
+              <p class="text-[10px] text-slate-500">Under-torqued insert allows tool shift under radial cutting force.</p>
+            </div>
+
+            <!-- Parameter 5: In-Process CMM Auto-Offset Feedback -->
+            <div class="sm:col-span-2 flex items-center justify-between p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+              <div class="space-y-0.5">
+                <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <i data-lucide="cpu" class="w-3.5 h-3.5 text-cyan-400"></i>
+                  <span>In-Process Auto Tool Wear / Thermal Offset Comp</span>
+                </div>
+                <p class="text-[10px] text-slate-400">Automatically adjusts CNC tool offset coordinate every 10 parts based on touch probe feedback.</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="chkAutoOffset" onchange="onParamChange()" class="sr-only peer">
+                <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: Interactive SPC Chart & Data Views (7 cols) -->
+      <div class="lg:col-span-7 space-y-6 flex flex-col">
+
+        <!-- WORKSPACE TAB NAVIGATION BAR -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <button onclick="switchMainTab('spc')" id="tabBtnSpc" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-500 text-slate-950 shadow-sm flex items-center gap-1.5">
+              <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
+              <span>SPC Run Chart</span>
+            </button>
+            <button onclick="switchMainTab('table')" id="tabBtnTable" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5">
+              <i data-lucide="table" class="w-3.5 h-3.5"></i>
+              <span>CMM Data Log</span>
+            </button>
+            <button onclick="switchMainTab('rca')" id="tabBtnRca" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5">
+              <i data-lucide="brain-circuit" class="w-3.5 h-3.5"></i>
+              <span>Root Cause Analysis & 5-Whys</span>
+            </button>
+          </div>
+
+          <div class="text-xs text-slate-400 font-mono hidden sm:block">
+            Drawing Target: <span class="text-white font-bold">30.0050 mm</span>
+          </div>
+        </div>
+
+        <!-- TAB CONTENT 1: SPC RUN CHART -->
+        <div id="tabSpc" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4 flex-1 flex flex-col">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span>Part Diameter SPC Run Chart (Part #1 to #50)</span>
+                <span id="chartStatusBadge" class="text-[10px] px-2 py-0.5 rounded font-mono bg-rose-950 text-rose-400 border border-rose-800">Process Out of Control</span>
+              </h3>
+              <p class="text-xs text-slate-400">Monitoring diameter deviation against Upper Spec Limit (30.010 mm) and Lower Spec Limit (30.000 mm).</p>
+            </div>
+            
+            <button onclick="resetChartZoom()" class="text-xs text-slate-400 hover:text-cyan-400 flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+              <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+              <span>Reset View</span>
+            </button>
+          </div>
+
+          <!-- Chart Viewport Box -->
+          <div class="relative w-full h-[320px] bg-slate-950/70 p-2 rounded-xl border border-slate-800/80">
+            <canvas id="spcChart"></canvas>
+          </div>
+
+          <!-- SPC Run Chart Legend & Rule Alerts -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center space-x-2">
+              <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+              <div>
+                <div class="text-slate-300 font-medium">In Spec (1-15)</div>
+                <div class="text-[10px] text-slate-500">30.000 - 30.010 mm</div>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center space-x-2">
+              <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+              <div>
+                <div class="text-slate-300 font-medium">Drift Zone (16-30)</div>
+                <div class="text-[10px] text-slate-500">Thermal shift phase</div>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center space-x-2">
+              <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+              <div>
+                <div class="text-slate-300 font-medium">Fail Oversize (31-50)</div>
+                <div class="text-[10px] text-slate-500">30.035 - 30.048 mm</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB CONTENT 2: CMM DATA LOG TABLE -->
+        <div id="tabTable" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4 hidden flex-1 flex-col">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="table" class="w-4 h-4 text-cyan-400"></i>
+              <h3 class="text-sm font-bold text-white">CMM Inspection Data Log</h3>
+            </div>
+            
+            <div class="flex items-center gap-2">
+              <!-- Filter Dropdown -->
+              <select id="filterStatus" onchange="renderTable()" class="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-1">
+                <option value="all">Show All (50)</option>
+                <option value="pass">Passed Only</option>
+                <option value="fail">Failed Only</option>
+              </select>
+
+              <button onclick="exportCSV()" class="px-3 py-1 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg text-xs font-semibold flex items-center gap-1 transition">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Table Wrapper -->
+          <div class="overflow-x-auto rounded-xl border border-slate-800 max-h-[360px] overflow-y-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="bg-slate-950 text-slate-400 sticky top-0 border-b border-slate-800">
+                <tr>
+                  <th class="p-2.5">Part #</th>
+                  <th class="p-2.5">Bore Diameter (mm)</th>
+                  <th class="p-2.5">Dev (µm)</th>
+                  <th class="p-2.5">Ovality (µm)</th>
+                  <th class="p-2.5">Status</th>
+                  <th class="p-2.5">Primary Deviation Cause</th>
+                </tr>
+              </thead>
+              <tbody id="cmmTableBody" class="divide-y divide-slate-800/60 bg-slate-900">
+                <!-- Rows dynamically injected -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB CONTENT 3: ROOT CAUSE ANALYSIS & 5-WHYS MODULE -->
+        <div id="tabRca" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-6 hidden">
+          
+          <div class="border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2 text-cyan-400 mb-1">
+              <i data-lucide="brain-circuit" class="w-5 h-5"></i>
+              <h3 class="text-base font-bold text-white">VET Root Cause Analysis (RCA) Workshop</h3>
+            </div>
+            <p class="text-xs text-slate-400">Diagnose the physics behind the bore oversize failure and implement zero-defect corrective actions.</p>
+          </div>
+
+          <!-- Educational Physics Insights Card -->
+          <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="lightbulb" class="w-4 h-4"></i>
+              <span>Machining Physics Concept: Internal Boring vs Turning</span>
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-300">
+              <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
+                <span class="font-semibold text-rose-400 block mb-1">Why did the bore get OVERSIZED?</span>
+                <p class="text-slate-400 text-[11px] leading-relaxed">
+                  In <strong>Internal Boring</strong>, any outward movement or radial growth of the boring bar tool tip pushes deeper into the aluminum workpiece wall, creating a <strong>larger bore diameter</strong>. Thermal expansion of the steel boring bar as coolant temperature rises is the primary driver!
+                </p>
+              </div>
+              <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800">
+                <span class="font-semibold text-cyan-400 block mb-1">The Tool Wear Paradox Trap</span>
+                <p class="text-slate-400 text-[11px] leading-relaxed">
+                  Normal insert flank wear causes tool length to shrink inward, which would make an internal bore <em>undersized</em>. Because this batch turned <strong>oversized</strong> (+35 to +48 µm), tool wear is NOT the main cause! Thermal growth + Built-Up Edge (BUE) are the true culprits.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Interactive 5-Whys Step Through -->
+          <div class="space-y-3">
+            <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+              <span>Interactive "5-Whys" Method Investigation</span>
+              <span id="whyScoreBadge" class="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">Progress: 0 / 5</span>
+            </h4>
+
+            <div class="space-y-2.5" id="whysContainer">
+              <!-- Why Step 1 -->
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2" id="whyStep1">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-cyan-400">Why #1: Why were parts #31–50 rejected by CMM quality control?</span>
+                  <span class="text-[10px] text-slate-500 font-mono">Symptom Level</span>
+                </div>
+                <select id="selectWhy1" onchange="checkWhy(1)" class="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg p-2 focus:border-cyan-500 focus:outline-none">
+                  <option value="" disabled selected>-- Select Student Diagnosis --</option>
+                  <option value="correct">The bearing bore diameter exceeded Upper Spec Limit (USL 30.010 mm), reaching up to 30.048 mm.</option>
+                  <option value="wrong1">The operator used the wrong aluminum alloy raw material.</option>
+                  <option value="wrong2">The CNC program feed rate was set too slow.</option>
+                </select>
+                <p id="whyFeedback1" class="text-[11px] hidden"></p>
+              </div>
+
+              <!-- Why Step 2 -->
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 opacity-50 pointer-events-none space-y-2" id="whyStep2">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-cyan-400">Why #2: Why did the bore diameter drift radially outward during machining?</span>
+                  <span class="text-[10px] text-slate-500 font-mono">Mechanism Level</span>
+                </div>
+                <select id="selectWhy2" onchange="checkWhy(2)" class="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg p-2 focus:border-cyan-500 focus:outline-none">
+                  <option value="" disabled selected>-- Select Student Diagnosis --</option>
+                  <option value="wrong1">The boring insert experienced severe abrasive flank wear.</option>
+                  <option value="correct">The steel boring bar thermally expanded radially due to heat buildup from continuous machining.</option>
+                  <option value="wrong2">The CMM calibration sphere was dirty.</option>
+                </select>
+                <p id="whyFeedback2" class="text-[11px] hidden"></p>
+              </div>
+
+              <!-- Why Step 3 -->
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 opacity-50 pointer-events-none space-y-2" id="whyStep3">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-cyan-400">Why #3: Why did severe heat build up in the boring bar during parts #16–50?</span>
+                  <span class="text-[10px] text-slate-500 font-mono">Process Level</span>
+                </div>
+                <select id="selectWhy3" onchange="checkWhy(3)" class="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg p-2 focus:border-cyan-500 focus:outline-none">
+                  <option value="" disabled selected>-- Select Student Diagnosis --</option>
+                  <option value="correct">Coolant flow was insufficient and coolant temperature rose without active chilling, causing thermal bar growth.</option>
+                  <option value="wrong1">The aluminum mounting bracket material was too hard.</option>
+                  <option value="wrong2">The spindle speed was set to 0 RPM.</option>
+                </select>
+                <p id="whyFeedback3" class="text-[11px] hidden"></p>
+              </div>
+
+              <!-- Why Step 4 & 5 auto unlocked -->
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 opacity-50 pointer-events-none space-y-2" id="whyStep4">
+                <div class="flex justify-between items-center text-xs">
+                  <span class="font-bold text-cyan-400">Why #4 & #5: Root Cause Summary & Corrective Action Selection</span>
+                  <span class="text-[10px] text-slate-500 font-mono">Systemic Level</span>
+                </div>
+                <p class="text-xs text-slate-300">
+                  <strong>Root Cause:</strong> Lack of coolant temperature control combined with steel boring bar thermal expansion ($\Delta L$) and lack of auto-probe offset compensation.
+                </p>
+                <button onclick="applyFullCorrectiveAction()" class="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 shadow-md">
+                  <i data-lucide="check-check" class="w-4 h-4"></i>
+                  <span>Apply Engineering Corrective Action Package & Re-Run Batch</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- QUALITY REPORT GENERATOR MODAL -->
+  <div id="printModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden no-print">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="file-check" class="w-5 h-5 text-amber-400"></i>
+          <h3 class="text-base font-bold text-white">Generate Official Batch Quality Inspection Report</h3>
+        </div>
+        <button onclick="closePrintModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label for="studentName" class="block text-slate-300 mb-1 font-medium">VET Student / Inspector Name:</label>
+          <input type="text" id="studentName" placeholder="Enter your full name..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white focus:border-cyan-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label for="reportNotes" class="block text-slate-300 mb-1 font-medium">Quality Root Cause & Corrective Action Notes:</label>
+          <textarea id="reportNotes" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:border-cyan-500 focus:outline-none" placeholder="Summarize why Parts #16-50 failed and what corrective actions were applied..."></textarea>
+        </div>
+
+        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 font-mono text-[11px]">
+          <div class="text-cyan-400 font-bold">Report Preview Summary:</div>
+          <div>Part Number: MB-402 (Aluminum Mounting Bracket)</div>
+          <div>Total Inspected: 50 parts</div>
+          <div>Measured Mean ($\bar{X}$): <span id="repMean">--</span></div>
+          <div>Process Capability ($C_{pk}$): <span id="repCpk">--</span></div>
+          <div>Batch Conformance: <span id="repStatus">--</span></div>
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-3 border-t border-slate-800 pt-3">
+        <button onclick="closePrintModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cancel</button>
+        <button onclick="triggerPrint()" class="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-md">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Print / Save PDF Certificate</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRINT ONLY REPORT LAYOUT CONTAINER (FOR PDF EXPORT) -->
+  <div id="printableReport" class="hidden print-only p-8 text-black bg-white font-sans max-w-4xl mx-auto">
+    <div class="border-b-2 border-black pb-4 mb-6 flex justify-between items-start">
+      <div>
+        <h1 class="text-2xl font-bold uppercase tracking-tight">CMM Batch Quality Control Certificate</h1>
+        <p class="text-sm text-gray-600">Advanced Manufacturing VET Practical Assessment</p>
+      </div>
+      <div class="text-right text-xs font-mono">
+        <p><strong>Part No:</strong> MB-402</p>
+        <p><strong>Feature:</strong> Bearing Bore 30.000 mm</p>
+        <p><strong>Tolerance:</strong> +0.010 / -0.000 mm</p>
+        <p><strong>Date:</strong> <span id="printDate"></span></p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-6 text-xs border p-4 bg-gray-50 rounded">
+      <div>
+        <p><strong>Inspector / Student:</strong> <span id="printStudentName">--</span></p>
+        <p><strong>Batch Quantity:</strong> 50 Units</p>
+        <p><strong>Inspection Method:</strong> 4-Point CMM Touch Probe</p>
+      </div>
+      <div>
+        <p><strong>Batch Mean ($\bar{X}$):</strong> <span id="printMean">--</span></p>
+        <p><strong>Standard Dev ($\sigma$):</strong> <span id="printSigma">--</span></p>
+        <p><strong>Process $C_{pk}$:</strong> <span id="printCpk">--</span></p>
+      </div>
+    </div>
+
+    <div class="mb-6">
+      <h3 class="font-bold text-sm border-b pb-1 mb-2">Process Summary & Root Cause Analysis Findings</h3>
+      <p id="printNotesText" class="text-xs leading-relaxed text-gray-800">No notes provided.</p>
+    </div>
+
+    <div class="mb-6">
+      <h3 class="font-bold text-sm border-b pb-1 mb-2">CMM Critical Sampling Summary Data Log</h3>
+      <table class="w-full text-[10px] text-left border-collapse border border-gray-300">
+        <thead>
+          <tr class="bg-gray-100 border-b">
+            <th class="p-1 border">Part #</th>
+            <th class="p-1 border">Bore Diameter (mm)</th>
+            <th class="p-1 border">Deviation (µm)</th>
+            <th class="p-1 border">Result</th>
+          </tr>
+        </thead>
+        <tbody id="printTableBody">
+          <!-- Sample Rows injected for printing -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-12 pt-4 border-t flex justify-between text-xs text-gray-500">
+      <p>Quality Assurance Instructor Signature: _______________________</p>
+      <p>Status: APPROVED FOR RECORD</p>
+    </div>
+  </div>
+
+
+  <!-- JAVASCRIPT ENGINE & LOGIC -->
+  <script>
+    // CORE QUALITY CONTROL CONSTANTS & SPECIFICATIONS
+    const SPEC_NOMINAL = 30.0050; // Target center of 30.000 to 30.010 mm
+    const SPEC_LSL = 30.0000;     // Lower Spec Limit
+    const SPEC_USL = 30.0100;     // Upper Spec Limit
+    const BATCH_SIZE = 50;
+
+    // SIMULATION STATE VARIABLES
+    let batchData = [];
+    let currentIndex = 0;
+    let isPlaying = false;
+    let playInterval = null;
+    let animationSpeed = 300; // ms per part
+    let currentMode = 'problem'; // 'problem' or 'custom' or 'corrected'
+    let spcChartInstance = null;
+
+    // INITIALIZATION ON PAGE LOAD
+    window.onload = function() {
+      // Initialize Lucide Icons
+      lucide.createIcons();
+
+      // Initialize SPC Chart
+      initSPCChart();
+
+      // Load Default Problem Scenario Preset
+      loadProblemPreset();
+
+      // Set print date
+      document.getElementById('printDate').innerText = new Date().toLocaleDateString();
+    };
+
+    // GENERATE DATA FOR PROBLEM SCENARIO
+    // Parts 1-15: Pass (30.000 - 30.010 mm)
+    // Parts 16-30: Drift up
+    // Parts 31-50: Measure 30.035 - 30.048 mm
+    function generateProblemData() {
+      const data = [];
+      for (let i = 1; i <= BATCH_SIZE; i++) {
+        let dia = 0;
+        let ovality = (Math.random() * 2.5 + 0.5).toFixed(1); // 0.5 - 3.0 um
+        let cause = "Optimal Cut";
+
+        if (i <= 15) {
+          // Normal statistical distribution centered around 30.004 - 30.007 mm
+          dia = 30.0035 + (Math.random() * 0.0045);
+          cause = "In Specification";
+        } else if (i <= 30) {
+          // Linear / S-Curve Thermal Expansion Drift Phase
+          let progress = (i - 15) / 15; // 0 to 1
+          let targetDrift = 30.0080 + (progress * 0.0270); // Ramps up to ~30.035
+          dia = targetDrift + ((Math.random() - 0.5) * 0.003);
+          cause = "Thermal Expansion Ramping";
+        } else {
+          // Fully thermal saturated + BUE buildup (30.035 mm - 30.048 mm)
+          dia = 30.0350 + (Math.random() * 0.0130);
+          cause = "Thermal Saturation + BUE";
+        }
+
+        dia = parseFloat(dia.toFixed(4));
+        const devMicrons = parseFloat(((dia - SPEC_NOMINAL) * 1000).toFixed(1));
+        const isPass = (dia >= SPEC_LSL && dia <= SPEC_USL);
+
+        data.push({
+          partNum: i,
+          diameter: dia,
+          devMicrons: devMicrons,
+          ovality: ovality,
+          pass: isPass,
+          cause: cause,
+          tp1: (dia + (Math.random()*0.001 - 0.0005)).toFixed(4),
+          tp2: (dia + (Math.random()*0.001 - 0.0005)).toFixed(4),
+          tp3: (dia + (Math.random()*0.001 - 0.0005)).toFixed(4),
+          tp4: (dia + (Math.random()*0.001 - 0.0005)).toFixed(4)
+        });
+      }
+      return data;
+    }
+
+    // GENERATE DATA FROM CUSTOM USER PARAMETERS
+    function generateCustomData() {
+      const coolant = parseFloat(document.getElementById('sliderCoolant').value); // 0 (Cool) to 100 (Hot/Low flow)
+      const barMat = document.getElementById('selectBarMaterial').value; // steel, carbide, damped
+      const bueRisk = parseFloat(document.getElementById('sliderBUE').value); // 0 to 100
+      const torque = parseFloat(document.getElementById('sliderTorque').value); // 10 to 50
+      const autoComp = document.getElementById('chkAutoOffset').checked;
+
+      // Material CTE multiplier
+      let cteFactor = 1.0;
+      if (barMat === 'carbide') cteFactor = 0.35;
+      if (barMat === 'damped') cteFactor = 0.20;
+
+      // Torque slack factor
+      let torqueDeflection = Math.max(0, (30 - torque) * 0.0003);
+
+      const data = [];
+      let currentThermalGrowth = 0;
+
+      for (let i = 1; i <= BATCH_SIZE; i++) {
+        // Accumulate heat with part count
+        let heatBuildUp = (i / 50) * (coolant / 100) * 0.032 * cteFactor;
+        let bueFactor = (bueRisk / 100) * 0.008 * (Math.random() > 0.4 ? 1 : 0.2);
+
+        // Auto probe compensation resets offset every 10 parts!
+        if (autoComp && i % 10 === 1 && i > 1) {
+          heatBuildUp = heatBuildUp * 0.15; // Feedback loop zeros out 85% of thermal error
+        }
+
+        let totalDev = heatBuildUp + bueFactor + torqueDeflection + ((Math.random() - 0.5) * 0.0025);
+        let dia = parseFloat((SPEC_NOMINAL + totalDev).toFixed(4));
+        let devMicrons = parseFloat(((dia - SPEC_NOMINAL) * 1000).toFixed(1));
+        let isPass = (dia >= SPEC_LSL && dia <= SPEC_USL);
+
+        let cause = "Stable Machining";
+        if (heatBuildUp > 0.008) cause = "Thermal Bar Growth";
+        if (bueFactor > 0.004) cause = "Built-Up Edge (BUE)";
+        if (torqueDeflection > 0.003) cause = "Insert Shift / Loose Torque";
+
+        data.push({
+          partNum: i,
+          diameter: dia,
+          devMicrons: devMicrons,
+          ovality: (Math.random() * 2.0 + 0.5).toFixed(1),
+          pass: isPass,
+          cause: cause,
+          tp1: (dia + (Math.random()*0.0008 - 0.0004)).toFixed(4),
+          tp2: (dia + (Math.random()*0.0008 - 0.0004)).toFixed(4),
+          tp3: (dia + (Math.random()*0.0008 - 0.0004)).toFixed(4),
+          tp4: (dia + (Math.random()*0.0008 - 0.0004)).toFixed(4)
+        });
+      }
+      return data;
+    }
+
+    // LOAD PRESET: PROBLEM BATCH DRIFT
+    function loadProblemPreset() {
+      currentMode = 'problem';
+      pauseBatch();
+      batchData = generateProblemData();
+      currentIndex = BATCH_SIZE - 1; // Load full view
+
+      // Reset controls UI to problem state
+      document.getElementById('sliderCoolant').value = 85;
+      document.getElementById('selectBarMaterial').value = 'steel';
+      document.getElementById('sliderBUE').value = 75;
+      document.getElementById('sliderTorque').value = 15;
+      document.getElementById('chkAutoOffset').checked = false;
+      updateParamLabels();
+
+      updateAllViews();
+    }
+
+    // LOAD PRESET: OPTIMIZED PROCESS
+    function loadCorrectedPreset() {
+      currentMode = 'corrected';
+      pauseBatch();
+
+      // Set sliders to optimal
+      document.getElementById('sliderCoolant').value = 10;
+      document.getElementById('selectBarMaterial').value = 'carbide';
+      document.getElementById('sliderBUE').value = 10;
+      document.getElementById('sliderTorque').value = 35;
+      document.getElementById('chkAutoOffset').checked = true;
+      updateParamLabels();
+
+      batchData = generateCustomData();
+      currentIndex = BATCH_SIZE - 1;
+
+      updateAllViews();
+    }
+
+    // PARAMETER CHANGE HANDLER
+    function onParamChange() {
+      updateParamLabels();
+      currentMode = 'custom';
+      batchData = generateCustomData();
+      updateAllViews();
+    }
+
+    function updateParamLabels() {
+      const coolant = document.getElementById('sliderCoolant').value;
+      const valCoolant = document.getElementById('valCoolant');
+      if (coolant < 30) {
+        valCoolant.innerText = "Chilled High Flow (20°C)";
+        valCoolant.className = "font-mono text-emerald-400 text-[11px]";
+      } else if (coolant < 60) {
+        valCoolant.innerText = "Standard Flow (28°C)";
+        valCoolant.className = "font-mono text-amber-400 text-[11px]";
+      } else {
+        valCoolant.innerText = "Low Flow / Thermal Growth (+42°C)";
+        valCoolant.className = "font-mono text-rose-400 text-[11px]";
+      }
+
+      const barMat = document.getElementById('selectBarMaterial').value;
+      document.getElementById('barMaterialLabel').innerText = barMat.toUpperCase();
+
+      const bue = document.getElementById('sliderBUE').value;
+      document.getElementById('valBUE').innerText = bue > 50 ? "High Adhesion" : "Low (PCD Coated)";
+
+      const torque = document.getElementById('sliderTorque').value;
+      document.getElementById('valTorque').innerText = (torque / 10).toFixed(1) + " Nm";
+    }
+
+    // UPDATE ALL DASHBOARD VISUALS
+    function updateAllViews() {
+      const currentPart = batchData[currentIndex] || batchData[0];
+
+      // Update KPIs
+      updateKPIs();
+
+      // Update CMM Probe SVG Visualizer
+      updateCMMVisualizer(currentPart);
+
+      // Update SPC Chart
+      updateSPCChart();
+
+      // Update CMM Data Table
+      renderTable();
+    }
+
+    // CALCULATE SPC STATS & UPDATE KPIS
+    function updateKPIs() {
+      const visibleData = batchData.slice(0, currentIndex + 1);
+      const totalCount = visibleData.length;
+
+      document.getElementById('kpiPartProgress').innerText = `${totalCount} / ${BATCH_SIZE}`;
+      const pct = Math.round((totalCount / BATCH_SIZE) * 100);
+      document.getElementById('kpiProgressPct').innerText = `${pct}%`;
+      document.getElementById('progressBar').style.width = `${pct}%`;
+
+      if (totalCount === 0) return;
+
+      const values = visibleData.map(d => d.diameter);
+      const sum = values.reduce((a, b) => a + b, 0);
+      const mean = sum / totalCount;
+
+      // Standard Deviation Calculation
+      const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (totalCount > 1 ? totalCount - 1 : 1);
+      const sigma = Math.sqrt(variance);
+
+      // Fail count
+      const fails = visibleData.filter(d => !d.pass).length;
+      const scrapRate = ((fails / totalCount) * 100).toFixed(1);
+
+      // Capability Cp and Cpk
+      const toleranceBand = SPEC_USL - SPEC_LSL; // 0.010 mm
+      const cp = sigma > 0 ? (toleranceBand / (6 * sigma)) : 0;
+      const cpu = sigma > 0 ? ((SPEC_USL - mean) / (3 * sigma)) : 0;
+      const cpl = sigma > 0 ? ((mean - SPEC_LSL) / (3 * sigma)) : 0;
+      const cpk = Math.min(cpu, cpl);
+
+      // DOM Updates
+      document.getElementById('kpiMean').innerText = mean.toFixed(4) + " mm";
+      const devFromTarget = ((mean - SPEC_NOMINAL) * 1000).toFixed(1);
+      document.getElementById('kpiMeanDev').innerText = (devFromTarget >= 0 ? "+" : "") + devFromTarget + " µm";
+
+      document.getElementById('kpiScrapRate').innerText = scrapRate + "%";
+      document.getElementById('kpiScrapCount').innerText = `${fails} / ${totalCount}`;
+
+      const scrapNote = document.getElementById('kpiScrapNote');
+      if (fails === 0) {
+        scrapNote.innerText = "100% In Tolerance";
+        scrapNote.className = "text-[10px] text-emerald-400 mt-1";
+      } else {
+        scrapNote.innerText = `${fails} Oversized Parts Rejected`;
+        scrapNote.className = "text-[10px] text-rose-400 font-bold mt-1";
+      }
+
+      document.getElementById('kpiCp').innerText = cp.toFixed(2);
+      document.getElementById('kpiSigma').innerText = `σ: ${(sigma * 1000).toFixed(1)} µm`;
+
+      const kpiCpkEl = document.getElementById('kpiCpk');
+      const badgeEl = document.getElementById('kpiCpkBadge');
+      const descEl = document.getElementById('kpiCpkDesc');
+
+      kpiCpkEl.innerText = cpk.toFixed(2);
+
+      if (cpk >= 1.33) {
+        kpiCpkEl.className = "text-xl font-mono font-bold text-emerald-400";
+        badgeEl.className = "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-emerald-950 text-emerald-400 border border-emerald-800";
+        badgeEl.innerText = "CAPABLE";
+        descEl.innerText = "World Class Process";
+      } else if (cpk >= 1.0) {
+        kpiCpkEl.className = "text-xl font-mono font-bold text-amber-400";
+        badgeEl.className = "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-amber-950 text-amber-400 border border-amber-800";
+        badgeEl.innerText = "MARGINAL";
+        descEl.innerText = "High Scrap Risk";
+      } else {
+        kpiCpkEl.className = "text-xl font-mono font-bold text-rose-400";
+        badgeEl.className = "text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-rose-950 text-rose-400 border border-rose-800";
+        badgeEl.innerText = "UNCAPABLE";
+        descEl.innerText = "Action Required";
+      }
+
+      // Update Report Modal fields
+      document.getElementById('repMean').innerText = mean.toFixed(4) + " mm";
+      document.getElementById('repCpk').innerText = cpk.toFixed(2);
+      document.getElementById('repStatus').innerText = cpk >= 1.33 ? "ACCEPTED" : "REJECTED (Out of Spec)";
+    }
+
+    // UPDATE CMM TOUCH PROBE ANIMATED SVG VISUALIZER
+    function updateCMMVisualizer(part) {
+      if (!part) return;
+
+      document.getElementById('currentPartTag').innerText = `Part #${part.partNum}`;
+      document.getElementById('svgValueText').innerText = part.diameter.toFixed(4) + " mm";
+
+      const devText = document.getElementById('svgDevText');
+      const sign = part.devMicrons >= 0 ? "+" : "";
+      devText.innerText = `Dev: ${sign}${part.devMicrons.toFixed(1)} µm`;
+
+      const statusBadge = document.getElementById('statusBadge');
+      if (part.pass) {
+        statusBadge.innerText = "PASS";
+        statusBadge.className = "text-xs font-bold font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800";
+        devText.setAttribute("fill", "#10b981");
+      } else if (part.diameter > SPEC_USL) {
+        statusBadge.innerText = "FAIL OVERSIZED";
+        statusBadge.className = "text-xs font-bold font-mono px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 animate-pulse";
+        devText.setAttribute("fill", "#ef4444");
+      } else {
+        statusBadge.innerText = "FAIL UNDERSIZED";
+        statusBadge.className = "text-xs font-bold font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-400 border border-blue-800";
+        devText.setAttribute("fill", "#3b82f6");
+      }
+
+      // Dynamic Touch Point Text Values
+      document.getElementById('tp1').innerText = part.tp1;
+      document.getElementById('tp2').innerText = part.tp2;
+      document.getElementById('tp3').innerText = part.tp3;
+      document.getElementById('tp4').innerText = part.tp4;
+
+      // Animate Bore Geometry Circle radius in SVG according to actual dimension
+      const scaleOffset = (part.diameter - SPEC_NOMINAL) * 800; // Visual amplification
+      const newRadius = Math.max(60, Math.min(85, 70 + scaleOffset));
+      const boreEllipse = document.getElementById('svgActualBore');
+      boreEllipse.setAttribute('rx', newRadius.toFixed(1));
+      boreEllipse.setAttribute('ry', (newRadius + parseFloat(part.ovality)*0.8).toFixed(1));
+
+      if (part.pass) {
+        boreEllipse.setAttribute('stroke', '#10b981');
+        boreEllipse.setAttribute('fill', '#10b981');
+      } else {
+        boreEllipse.setAttribute('stroke', '#ef4444');
+        boreEllipse.setAttribute('fill', '#ef4444');
+      }
+
+      // Position Tolerance Pointer Pin on Bar Gauge
+      // Gauge Range: 29.990 (0%) to 30.050 (100%)
+      const minG = 29.990;
+      const maxG = 30.050;
+      let posPct = ((part.diameter - minG) / (maxG - minG)) * 100;
+      posPct = Math.max(2, Math.min(98, posPct));
+      document.getElementById('tolerancePointer').style.left = `${posPct}%`;
+
+      // Trigger Probe Motion Animation sequence
+      animateProbeTouch();
+    }
+
+    // ANIMATE CMM PROBE TOUCHING BORE WALLS
+    function animateProbeTouch() {
+      const probeGroup = document.getElementById('svgProbeGroup');
+      const ripple = document.getElementById('svgTouchRipple');
+
+      // Random touch coordinate sequence (0 deg top, 90 deg right)
+      const angles = [0, 90, 180, 270];
+      const targetAngle = angles[Math.floor(Math.random() * angles.length)];
+      const rad = (targetAngle * Math.PI) / 180;
+
+      const tx = Math.sin(rad) * 65;
+      const ty = -Math.cos(rad) * 65;
+
+      probeGroup.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+      probeGroup.setAttribute('transform', `translate(${160 + tx}, ${135 + ty})`);
+
+      ripple.setAttribute('opacity', '1');
+      ripple.setAttribute('r', '5');
+      setTimeout(() => {
+        ripple.setAttribute('r', '16');
+        ripple.setAttribute('opacity', '0');
+      }, 150);
+    }
+
+    // INITIALIZE CHART.JS SPC RUN CHART
+    function initSPCChart() {
+      const ctx = document.getElementById('spcChart').getContext('2d');
+
+      spcChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array.from({length: BATCH_SIZE}, (_, i) => `#${i + 1}`),
+          datasets: [
+            {
+              label: 'Bore Diameter (mm)',
+              data: [],
+              borderColor: '#06b6d4',
+              backgroundColor: 'rgba(6, 182, 212, 0.1)',
+              borderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 7,
+              pointBackgroundColor: [],
+              pointBorderColor: '#ffffff',
+              tension: 0.2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (evt, activeEls) => {
+            if (activeEls.length > 0) {
+              const index = activeEls[0].index;
+              currentIndex = index;
+              updateAllViews();
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Part Inspection Sequence (#1 - #50)', color: '#94a3b8', font: { size: 10 } },
+              grid: { color: 'rgba(51, 65, 85, 0.3)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              title: { display: true, text: 'Diameter (mm)', color: '#94a3b8', font: { size: 10 } },
+              min: 29.995,
+              max: 30.055,
+              grid: { color: 'rgba(51, 65, 85, 0.3)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 10 },
+                callback: function(value) { return value.toFixed(3); }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              borderColor: '#334155',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 12, weight: 'bold' },
+              bodyFont: { family: 'JetBrains Mono', size: 11 },
+              callbacks: {
+                title: (items) => `Part #${items[0].label.replace('#', '')}`,
+                label: (context) => {
+                  const part = batchData[context.dataIndex];
+                  return [
+                    ` Measured: ${part.diameter.toFixed(4)} mm`,
+                    ` Deviation: ${part.devMicrons >= 0 ? '+' : ''}${part.devMicrons} µm`,
+                    ` Status: ${part.pass ? 'PASS' : 'FAIL OVERSIZED'}`,
+                    ` Cause: ${part.cause}`
+                  ];
+                }
+              }
+            },
+            annotation: {
+              annotations: {
+                uslLine: {
+                  type: 'line',
+                  yMin: SPEC_USL,
+                  yMax: SPEC_USL,
+                  borderColor: '#ef4444',
+                  borderWidth: 2,
+                  borderDash: [6, 4],
+                  label: {
+                    display: true,
+                    content: 'USL = 30.010 mm',
+                    position: 'start',
+                    backgroundColor: '#7f1d1d',
+                    color: '#fca5a5',
+                    font: { size: 9, family: 'JetBrains Mono' }
+                  }
+                },
+                targetLine: {
+                  type: 'line',
+                  yMin: SPEC_NOMINAL,
+                  yMax: SPEC_NOMINAL,
+                  borderColor: '#06b6d4',
+                  borderWidth: 1.5,
+                  label: {
+                    display: true,
+                    content: 'Target = 30.005 mm',
+                    position: 'end',
+                    backgroundColor: '#164e63',
+                    color: '#67e8f9',
+                    font: { size: 9, family: 'JetBrains Mono' }
+                  }
+                },
+                lslLine: {
+                  type: 'line',
+                  yMin: SPEC_LSL,
+                  yMax: SPEC_LSL,
+                  borderColor: '#3b82f6',
+                  borderWidth: 2,
+                  borderDash: [6, 4],
+                  label: {
+                    display: true,
+                    content: 'LSL = 30.000 mm',
+                    position: 'start',
+                    backgroundColor: '#1e3a8a',
+                    color: '#93c5fd',
+                    font: { size: 9, family: 'JetBrains Mono' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // UPDATE SPC CHART DATA AND POINT COLORS
+    function updateSPCChart() {
+      if (!spcChartInstance) return;
+
+      const visibleData = batchData.slice(0, currentIndex + 1);
+      const diameters = visibleData.map(d => d.diameter);
+
+      // Dynamic color assignments
+      const pointColors = visibleData.map(d => {
+        if (!d.pass) return '#ef4444'; // Red fail
+        if (d.diameter > 30.008) return '#f59e0b'; // Amber warning near USL
+        return '#10b981'; // Green pass
+      });
+
+      spcChartInstance.data.datasets[0].data = diameters;
+      spcChartInstance.data.datasets[0].pointBackgroundColor = pointColors;
+      spcChartInstance.update('none');
+
+      // Update Chart Card Header Badge
+      const chartBadge = document.getElementById('chartStatusBadge');
+      const hasFails = visibleData.some(d => !d.pass);
+      if (hasFails) {
+        chartBadge.innerText = "Process Out of Control";
+        chartBadge.className = "text-[10px] px-2 py-0.5 rounded font-mono bg-rose-950 text-rose-400 border border-rose-800";
+      } else {
+        chartBadge.innerText = "Process In Control";
+        chartBadge.className = "text-[10px] px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800";
+      }
+    }
+
+    function resetChartZoom() {
+      spcChartInstance.resetZoom();
+    }
+
+    // RENDER CMM DATA TABLE WITH FILTER
+    function renderTable() {
+      const tbody = document.getElementById('cmmTableBody');
+      const filter = document.getElementById('filterStatus').value;
+      tbody.innerHTML = '';
+
+      const visibleData = batchData.slice(0, currentIndex + 1);
+
+      visibleData.forEach(part => {
+        if (filter === 'pass' && !part.pass) return;
+        if (filter === 'fail' && part.pass) return;
+
+        const tr = document.createElement('tr');
+        tr.className = part.partNum === (currentIndex + 1) ? 'bg-cyan-950/40 border-l-2 border-cyan-400' : 'hover:bg-slate-800/50';
+
+        const statusPill = part.pass 
+          ? '<span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">PASS</span>'
+          : '<span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 text-[10px] font-bold">FAIL OVERSIZE</span>';
+
+        tr.innerHTML = `
+          <td class="p-2.5 font-bold text-white">#${part.partNum}</td>
+          <td class="p-2.5 ${part.pass ? 'text-slate-200' : 'text-rose-400 font-bold'}">${part.diameter.toFixed(4)} mm</td>
+          <td class="p-2.5 text-slate-400">${part.devMicrons >= 0 ? '+' : ''}${part.devMicrons} µm</td>
+          <td class="p-2.5 text-slate-400">${part.ovality} µm</td>
+          <td class="p-2.5">${statusPill}</td>
+          <td class="p-2.5 text-slate-400 text-[11px]">${part.cause}</td>
+        `;
+
+        tr.onclick = () => {
+          currentIndex = part.partNum - 1;
+          updateAllViews();
+        };
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // BATCH ANIMATION PLAYER CONTROLS
+    function togglePlay() {
+      if (isPlaying) {
+        pauseBatch();
+      } else {
+        startBatch();
+      }
+    }
+
+    function startBatch() {
+      if (currentIndex >= BATCH_SIZE - 1) {
+        currentIndex = 0;
+      }
+      isPlaying = true;
+      document.getElementById('btnPlayText').innerText = "Pause";
+      document.getElementById('btnPlay').className = "px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5";
+
+      if (animationSpeed === 0) {
+        // Instant speed mode
+        currentIndex = BATCH_SIZE - 1;
+        updateAllViews();
+        pauseBatch();
+        return;
+      }
+
+      playInterval = setInterval(() => {
+        if (currentIndex < BATCH_SIZE - 1) {
+          currentIndex++;
+          updateAllViews();
+        } else {
+          pauseBatch();
+        }
+      }, animationSpeed);
+    }
+
+    function pauseBatch() {
+      isPlaying = false;
+      clearInterval(playInterval);
+      document.getElementById('btnPlayText').innerText = "Run Batch";
+      document.getElementById('btnPlay').className = "px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs transition flex items-center gap-1.5";
+    }
+
+    function stepForward() {
+      pauseBatch();
+      if (currentIndex < BATCH_SIZE - 1) {
+        currentIndex++;
+        updateAllViews();
+      }
+    }
+
+    function resetBatch() {
+      pauseBatch();
+      currentIndex = 0;
+      updateAllViews();
+    }
+
+    function setSpeed(spd) {
+      animationSpeed = spd;
+      document.getElementById('spd1').className = spd === 300 ? "px-2 py-0.5 text-xs font-mono rounded bg-cyan-950 text-cyan-400 border border-cyan-800" : "px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-slate-400";
+      document.getElementById('spd2').className = spd === 100 ? "px-2 py-0.5 text-xs font-mono rounded bg-cyan-950 text-cyan-400 border border-cyan-800" : "px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-slate-400";
+      document.getElementById('spd3').className = spd === 0 ? "px-2 py-0.5 text-xs font-mono rounded bg-cyan-950 text-cyan-400 border border-cyan-800" : "px-2 py-0.5 text-xs font-mono rounded bg-slate-800 text-slate-400";
+
+      if (isPlaying) {
+        pauseBatch();
+        startBatch();
+      }
+    }
+
+    // MAIN TAB NAVIGATION SWITCHER
+    function switchMainTab(tabName) {
+      document.getElementById('tabSpc').classList.add('hidden');
+      document.getElementById('tabTable').classList.add('hidden');
+      document.getElementById('tabRca').classList.add('hidden');
+
+      document.getElementById('tabBtnSpc').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5";
+      document.getElementById('tabBtnTable').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5";
+      document.getElementById('tabBtnRca').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white flex items-center gap-1.5";
+
+      if (tabName === 'spc') {
+        document.getElementById('tabSpc').classList.remove('hidden');
+        document.getElementById('tabBtnSpc').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-500 text-slate-950 shadow-sm flex items-center gap-1.5";
+      } else if (tabName === 'table') {
+        document.getElementById('tabTable').classList.remove('hidden');
+        document.getElementById('tabTable').classList.add('flex');
+        document.getElementById('tabBtnTable').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-500 text-slate-950 shadow-sm flex items-center gap-1.5";
+      } else if (tabName === 'rca') {
+        document.getElementById('tabRca').classList.remove('hidden');
+        document.getElementById('tabBtnRca').className = "px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-cyan-500 text-slate-950 shadow-sm flex items-center gap-1.5";
+      }
+    }
+
+    function toggleTab(tab) {
+      switchMainTab(tab === 'analysis' ? 'rca' : 'spc');
+    }
+
+    // 5-WHYS INTERACTIVE WORKFLOW LOGIC
+    let whyProgress = 0;
+
+    function checkWhy(step) {
+      const sel = document.getElementById(`selectWhy${step}`);
+      const val = sel.value;
+      const feedback = document.getElementById(`whyFeedback${step}`);
+
+      feedback.classList.remove('hidden');
+
+      if (val === 'correct') {
+        feedback.innerText = "✓ Correct Diagnosis!";
+        feedback.className = "text-[11px] text-emerald-400 font-bold mt-1";
+
+        // Unlock next step
+        whyProgress = Math.max(whyProgress, step);
+        document.getElementById('whyScoreBadge').innerText = `Progress: ${whyProgress} / 5`;
+
+        if (step < 3) {
+          const nextStepEl = document.getElementById(`whyStep${step + 1}`);
+          nextStepEl.classList.remove('opacity-50', 'pointer-events-none');
+        } else if (step === 3) {
+          document.getElementById('whyStep4').classList.remove('opacity-50', 'pointer-events-none');
+        }
+      } else {
+        feedback.innerText = "❌ Incorrect physics assumption. Re-evaluate internal boring tool mechanics!";
+        feedback.className = "text-[11px] text-rose-400 font-bold mt-1";
+      }
+    }
+
+    function applyFullCorrectiveAction() {
+      loadCorrectedPreset();
+      switchMainTab('spc');
+      alert("Engineering Corrective Action Package Applied!\n- Chilled High-Pressure Coolant (20°C)\n- Carbide Low-CTE Boring Bar\n- In-Process Touch Probe Auto Offset Enabled\n\nBatch re-simulated with Cpk > 1.33!");
+    }
+
+    // CSV DATA EXPORT FUNCTIONALITY
+    function exportCSV() {
+      let csv = "Part_Number,Diameter_mm,Deviation_microns,Ovality_microns,Pass_Fail,Primary_Cause\n";
+      batchData.forEach(d => {
+        csv += `${d.partNum},${d.diameter.toFixed(4)},${d.devMicrons},${d.ovality},${d.pass ? 'PASS' : 'FAIL'},"${d.cause}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `CMM_Inspection_MB402_Batch_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // REPORT MODAL & PRINTING
+    function openPrintModal() {
+      document.getElementById('printModal').classList.remove('hidden');
+    }
+
+    function closePrintModal() {
+      document.getElementById('printModal').classList.add('hidden');
+    }
+
+    function triggerPrint() {
+      const studentName = document.getElementById('studentName').value || "VET Student Inspector";
+      const notes = document.getElementById('reportNotes').value || "Parts #16-50 failed due to uncompensated thermal expansion of the steel boring bar as coolant temperature rose during continuous production.";
+
+      document.getElementById('printStudentName').innerText = studentName;
+      document.getElementById('printNotesText').innerText = notes;
+
+      const visibleData = batchData.slice(0, currentIndex + 1);
+      const values = visibleData.map(d => d.diameter);
+      const mean = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(4);
+      const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
+      const sigma = Math.sqrt(variance);
+      const cpk = Math.min((SPEC_USL - mean) / (3 * sigma), (mean - SPEC_LSL) / (3 * sigma)).toFixed(2);
+
+      document.getElementById('printMean').innerText = mean + " mm";
+      document.getElementById('printSigma').innerText = (sigma * 1000).toFixed(1) + " µm";
+      document.getElementById('printCpk').innerText = cpk;
+
+      // Populate print table with key sampling parts
+      const printTable = document.getElementById('printTableBody');
+      printTable.innerHTML = '';
+      const sampleIndices = [0, 4, 9, 14, 19, 24, 29, 34, 39, 44, 49]; // 11 sample parts
+      
+      sampleIndices.forEach(idx => {
+        if (idx < visibleData.length) {
+          const p = visibleData[idx];
+          const tr = document.createElement('tr');
+          tr.className = "border-b";
+          tr.innerHTML = `
+            <td class="p-1 border">Part #${p.partNum}</td>
+            <td class="p-1 border">${p.diameter.toFixed(4)} mm</td>
+            <td class="p-1 border">${p.devMicrons >= 0 ? '+' : ''}${p.devMicrons} µm</td>
+            <td class="p-1 border font-bold ${p.pass ? 'text-emerald-700' : 'text-rose-700'}">${p.pass ? 'PASS' : 'FAIL OVERSIZE'}</td>
+          `;
+          printTable.appendChild(tr);
+        }
+      });
+
+      closePrintModal();
+      window.print();
+    }
+  </script>
+</body>
+</html>
